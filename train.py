@@ -34,13 +34,11 @@ def train(model, device, loader, optimizer, scheduler, args):
         if batch.x.shape[0] == 1 or batch.batch[-1] == 0:
             pass
         else:
-            atom_pred_list, extra_output = model(batch)
+            atom_pred_list, extra_output = model(batch)  # extra_output: prior_pos_list, latent_mean, latent_logstd
             optimizer.zero_grad()
 
             if args.distributed:
-                loss, loss_dict = model.module.compute_loss(
-                    atom_pred_list, extra_output, batch, args
-                )
+                loss, loss_dict = model.module.compute_loss(atom_pred_list, extra_output, batch, args)
             else:
                 loss, loss_dict = model.compute_loss(atom_pred_list, extra_output, batch, args)
 
@@ -81,9 +79,7 @@ def evaluate(model, device, loader, args):
         pre_nodes = 0
         for i in range(batch_size):
             mol_labels.append(batch.rd_mol[i])
-            mol_preds.append(
-                set_rdmol_positions(batch.rd_mol[i], pred[pre_nodes : pre_nodes + n_nodes[i]])
-            )
+            mol_preds.append(set_rdmol_positions(batch.rd_mol[i], pred[pre_nodes : pre_nodes + n_nodes[i]]))
             pre_nodes += n_nodes[i]
 
     rmsd_list = []
@@ -115,7 +111,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--num-workers", type=int, default=4)
     # parser.add_argument("--log-dir", type=str, default="", help="tensorboard log directory")
-    parser.add_argument("--checkpoint-dir", type=str, default="")
+    parser.add_argument("--checkpoint-dir", type=str, default="./checkpoints/qm9")
 
     parser.add_argument("--log-interval", type=int, default=100)
     parser.add_argument("--dropout", type=float, default=0.0)
@@ -128,10 +124,8 @@ def main():
     parser.add_argument("--beta2", type=float, default=0.999)
     parser.add_argument("--period", type=float, default=10)
 
-    parser.add_argument("--base-path", type=str, default="/data/code/ConfGF/dataset/")
-    parser.add_argument(
-        "--dataset-name", type=str, default="qm9", choices=["qm9", "drugs", "iso17"]
-    )
+    parser.add_argument("--base-path", type=str, default="./data/qm9_processed")
+    parser.add_argument("--dataset-name", type=str, default="qm9", choices=["qm9", "drugs", "iso17"])
     parser.add_argument("--train-size", type=float, default=0.8)
     parser.add_argument("--seed", type=int, default=2021)
     parser.add_argument("--lr-warmup", action="store_true", default=False)
@@ -140,9 +134,7 @@ def main():
     parser.add_argument("--train-subset", action="store_true", default=False)
     parser.add_argument("--eval-from", type=str, default=None)
     parser.add_argument("--extend-edge", action="store_true", default=False)
-    parser.add_argument(
-        "--data-split", type=str, choices=["cgcf", "default", "confgf"], default="default"
-    )
+    parser.add_argument("--data-split", type=str, choices=["cgcf", "default", "confgf"], default="default")
     parser.add_argument("--reuse-prior", action="store_true", default=False)
     parser.add_argument("--cycle", type=int, default=1)
 
@@ -163,8 +155,8 @@ def main():
     parser.add_argument("--use-ss", action="store_true", default=False)
     parser.add_argument("--rand-aug", action="store_true", default=False)
     parser.add_argument("--not-origin", action="store_true", default=False)
-    parser.add_argument("--ang-lam", type=float, default=0.)
-    parser.add_argument("--bond-lam", type=float, default=0.)
+    parser.add_argument("--ang-lam", type=float, default=0.0)
+    parser.add_argument("--bond-lam", type=float, default=0.0)
     parser.add_argument("--no-3drot", action="store_true", default=False)
 
     args = parser.parse_args()
@@ -190,23 +182,19 @@ def main():
         remove_hs=args.remove_hs,
     )
     split_idx = dataset.get_idx_split()
-    dataset_train = (
-        dataset[split_idx["train"]]
-        if not args.train_subset
-        else dataset[split_idx["train"]][:102400]
-    )
+    dataset_train = dataset[split_idx["train"]] if not args.train_subset else dataset[split_idx["train"]][:102400]
 
     if args.distributed:
         sampler_train = DistributedSampler(dataset_train)
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
 
-    batch_sampler_train = torch.utils.data.BatchSampler(
-        sampler_train, args.batch_size, drop_last=True
-    )
+    batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.batch_size, drop_last=True)
 
     train_loader = DataLoader(
-        dataset_train, batch_sampler=batch_sampler_train, num_workers=args.num_workers,
+        dataset_train,
+        batch_sampler=batch_sampler_train,
+        num_workers=args.num_workers,
     )
     train_loader_dev = DataLoader(
         dataset[split_idx["train"]][:102400],
@@ -324,9 +312,7 @@ def main():
         test_curve.append(test_pref)
         if args.checkpoint_dir:
             logs = {"Train": train_pref, "Valid": valid_pref, "Test": test_pref}
-            with io.open(
-                os.path.join(args.checkpoint_dir, "log.txt"), "a", encoding="utf8", newline="\n"
-            ) as tgt:
+            with io.open(os.path.join(args.checkpoint_dir, "log.txt"), "a", encoding="utf8", newline="\n") as tgt:
                 print(json.dumps(logs), file=tgt)
 
             checkpoint = {

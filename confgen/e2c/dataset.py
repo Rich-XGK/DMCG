@@ -213,9 +213,7 @@ class PygGeomDataset(InMemoryDataset):
         data_list = []
         bad_case = 0
         for subset in ["train", "val", "test"]:
-            pkl_fn = os.path.join(
-                self.base_path, self.dataset_name, f"{subset}_{self.dataset_name.upper()}.pkl"
-            )
+            pkl_fn = os.path.join(self.base_path, self.dataset_name, f"{subset}_{self.dataset_name.upper()}.pkl")
             with open(pkl_fn, "rb") as src:
                 mol_list = pickle.load(src)
 
@@ -378,12 +376,22 @@ class PygGeomDataset(InMemoryDataset):
         torch.save((data, slices), self.processed_paths[0])
         os.makedirs(os.path.join(self.root, "split"), exist_ok=True)
         torch.save(
-            split_dict, os.path.join(self.root, "split", "split_dict.pt"),
+            split_dict,
+            os.path.join(self.root, "split", "split_dict.pt"),
         )
 
 
-class CustomData(Data):
-    def __cat_dim__(self, key, value):
+# class CustomData(Data): # pyg 1.7.2
+#     def __cat_dim__(self, key, value):
+#         if isinstance(value, SparseTensor):
+#             return (0, 1)
+#         elif bool(re.search("(index|face|nei_tgt_mask)", key)):
+#             return -1
+#         return 0
+
+
+class CustomData(Data):  # pyg 2.
+    def __cat_dim__(self, key, value, *args, **kwargs):
         if isinstance(value, SparseTensor):
             return (0, 1)
         elif bool(re.search("(index|face|nei_tgt_mask)", key)):
