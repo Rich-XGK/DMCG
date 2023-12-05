@@ -164,7 +164,7 @@ def main():
     init_distributed_mode(args)
     print(args)
 
-    CosineBeta = Cosinebeta(args)
+    CosineBeta = Cosinebeta(args)   # vae_beta scheduler, vae_beta_min <= vae_beta <= vae_beta_max
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
