@@ -174,12 +174,12 @@ def main():
 
     dataset = PygGeomDataset(
         root="dataset",
-        dataset=args.dataset_name,
-        base_path=args.base_path,
-        seed=args.seed,
-        extend_edge=args.extend_edge,
-        data_split=args.data_split,
-        remove_hs=args.remove_hs,
+        dataset=args.dataset_name,  # 'qm9'
+        base_path=args.base_path,   # './data/qm9_processed'
+        seed=args.seed, 
+        extend_edge=args.extend_edge,   # False
+        data_split=args.data_split, # 'confgf'
+        remove_hs=args.remove_hs,   # True
     )
     split_idx = dataset.get_idx_split()
     dataset_train = dataset[split_idx["train"]] if not args.train_subset else dataset[split_idx["train"]][:102400]

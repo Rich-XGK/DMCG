@@ -127,17 +127,19 @@ def rdk2graph(mol: Mol):
         edge_index = np.empty((2, 0), dtype=np.int64)
         edge_attr = np.empty((0, num_bond_features), dtype=np.int64)
 
-    n_src = list()
-    n_tgt = list()
+    #   从一个分子（mol）中提取出所有有多于一个邻居的原子，并将这些原子的索引和它们的邻居索引存储在数组中
+    n_src = list()  # 有多于一个邻居的原子的索引
+    n_tgt = list()  # 有多于一个邻居的原子的邻居原子的索引
     for atom in mol.GetAtoms():
-        n_ids = [n.GetIdx() for n in atom.GetNeighbors()]
-        if len(n_ids) > 1:
-            n_src.append(atom.GetIdx())
-            n_tgt.append(n_ids)
-    nums_neigh = len(n_src)
-    nei_src_index = np.array(n_src, dtype=np.int64).reshape(1, -1)
-    nei_tgt_index = np.zeros((6, nums_neigh), dtype=np.int64)
-    nei_tgt_mask = np.ones((6, nums_neigh), dtype=np.bool)
+        n_ids = [n.GetIdx() for n in atom.GetNeighbors()]   # 获取原子的邻居原子的索引
+        if len(n_ids) > 1:  # 如果邻居原子的数量大于1
+            n_src.append(atom.GetIdx())  # 将该原子的索引存储在n_src中
+            n_tgt.append(n_ids) # 将该原子的邻居原子的索引存储在n_tgt中
+    nums_neigh = len(n_src) # 有多于一个邻居的原子的数量
+    nei_src_index = np.array(n_src, dtype=np.int64).reshape(1, -1) # 有多于一个邻居的原子的索引
+    nei_tgt_index = np.zeros((6, nums_neigh), dtype=np.int64)   # 有多于一个邻居的原子的邻居原子的索引
+    nei_tgt_mask = np.ones((6, nums_neigh), dtype=np.bool)  # 有多于一个邻居的原子的邻居原子的掩码
+    # nei_tgt_index 的形状为 (6, nums_neigh) 是因为它被设计为存储每个原子的最多6个邻居的索引。
 
     for i, n_ids in enumerate(n_tgt):
         nei_tgt_index[: len(n_ids), i] = n_ids
