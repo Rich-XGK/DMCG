@@ -138,7 +138,7 @@ def rdk2graph(mol: Mol):
     nums_neigh = len(n_src) # 有多于一个邻居的原子的数量
     nei_src_index = np.array(n_src, dtype=np.int64).reshape(1, -1) # 有多于一个邻居的原子的索引
     nei_tgt_index = np.zeros((6, nums_neigh), dtype=np.int64)   # 有多于一个邻居的原子的邻居原子的索引
-    nei_tgt_mask = np.ones((6, nums_neigh), dtype=np.bool)  # 有多于一个邻居的原子的邻居原子的掩码
+    nei_tgt_mask = np.ones((6, nums_neigh), dtype=bool)  # 有多于一个邻居的原子的邻居原子的掩码
     # nei_tgt_index 的形状为 (6, nums_neigh) 是因为它被设计为存储每个原子的最多6个邻居的索引。
 
     for i, n_ids in enumerate(n_tgt):
