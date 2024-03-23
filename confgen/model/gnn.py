@@ -165,12 +165,16 @@ class GNN(nn.Module):
                     global_attn=global_attn,
                 )
             )
-        self.encoder_head = MLPwoLastAct(latent_size, [latent_size, 2 * latent_size], use_bn=use_bn)
+        self.encoder_head = MLPwoLastAct(
+            latent_size, [latent_size, 2 * latent_size], use_bn=use_bn
+        )
 
         # decoder
         self.decoder_gnns = nn.ModuleList()
         self.decoder_pos = nn.ModuleList()
-        decoder_layers = num_message_passing_steps if decoder_layers is None else decoder_layers
+        decoder_layers = (
+            num_message_passing_steps if decoder_layers is None else decoder_layers
+        )
         for i in range(decoder_layers):
             if (not shared_decoder) or i == 0:
                 edge_model = DropoutIfTraining(
@@ -247,8 +251,12 @@ class GNN(nn.Module):
         # self supervised
         self.use_ss = use_ss
         if self.use_ss:
-            self.projection_head = MLPwoLastAct(latent_size, [mlp_hidden_size, latent_size], use_bn=True)
-            self.prediction_head = MLPwoLastAct(latent_size, [mlp_hidden_size, latent_size], use_bn=True)
+            self.projection_head = MLPwoLastAct(
+                latent_size, [mlp_hidden_size, latent_size], use_bn=True
+            )
+            self.prediction_head = MLPwoLastAct(
+                latent_size, [mlp_hidden_size, latent_size], use_bn=True
+            )
 
         # random augmentation
         self.rand_aug = rand_aug
@@ -277,10 +285,14 @@ class GNN(nn.Module):
         onehot_edge_attr = one_hot_bonds(edge_attr)  # (E, 15)
 
         graph_idx = torch.arange(num_graphs).to(x.device)  # [0, 1, 2, ..., G-1]
-        edge_batch = torch.repeat_interleave(graph_idx, num_edges, dim=0)  # (E, ) denoting which graph the edge belongs to
+        edge_batch = torch.repeat_interleave(
+            graph_idx, num_edges, dim=0
+        )  # (E, ) denoting which graph the edge belongs to
 
         x_embed = self.encoder_node(onehot_x)  # MLP(onehot_x), (N, 256)
-        edge_attr_embed = self.encoder_edge(onehot_edge_attr)  # MLP(onehot_edge_attr), (E, 256)
+        edge_attr_embed = self.encoder_edge(
+            onehot_edge_attr
+        )  # MLP(onehot_edge_attr), (E, 256)
         u_embed = self.global_init.expand(num_graphs, -1)  # (G, 256)
 
         extra_output = {}
@@ -295,20 +307,31 @@ class GNN(nn.Module):
         u = u_embed  # (G, 256)
         for i, layer in enumerate(self.prior_conf_gnns):
             # h^{-}_{i}, h^{-}_{ij}, # update bond representations, equation (3)
-            extended_x, extended_edge_attr = self.extend_x_edge(cur_pos, x, edge_attr, edge_index)
-            x_1, edge_attr_1, u_1 = layer(  # update node representations, global representations. equation (4), (5), (6)
-                extended_x,
-                edge_index,
-                extended_edge_attr,
-                u,
-                edge_batch,
-                node_batch,
-                num_nodes,
-                num_edges,
+            extended_x, extended_edge_attr = self.extend_x_edge(
+                cur_pos, x, edge_attr, edge_index
+            )
+            x_1, edge_attr_1, u_1 = (
+                layer(  # update node representations, global representations. equation (4), (5), (6)
+                    extended_x,
+                    edge_index,
+                    extended_edge_attr,
+                    u,
+                    edge_batch,
+                    node_batch,
+                    num_nodes,
+                    num_edges,
+                )
             )  # (N, 256), (E, 256), (G, 256)
-            x = F.dropout(x_1, p=self.dropout, training=self.training) + x  # h(l)_i = h(l-1)_i + *** equation (5)
-            edge_attr = F.dropout(edge_attr_1, p=self.dropout, training=self.training) + edge_attr  #   h(l)_{ij} = h(l-1)_{ij} + *** equation (4)
-            u = F.dropout(u_1, p=self.dropout, training=self.training) + u  # U(l)_G = U(l-1)_G + *** equation (6)
+            x = (
+                F.dropout(x_1, p=self.dropout, training=self.training) + x
+            )  # h(l)_i = h(l-1)_i + *** equation (5)
+            edge_attr = (
+                F.dropout(edge_attr_1, p=self.dropout, training=self.training)
+                + edge_attr
+            )  #   h(l)_{ij} = h(l-1)_{ij} + *** equation (4)
+            u = (
+                F.dropout(u_1, p=self.dropout, training=self.training) + u
+            )  # U(l)_G = U(l-1)_G + *** equation (6)
 
             if self.pred_pos_residual:  # update comformations, equation (7)
                 delta_pos = self.prior_conf_pos[i](x)  # (N, 3)
@@ -316,7 +339,9 @@ class GNN(nn.Module):
             else:
                 cur_pos = self.prior_conf_pos[i](x)
                 cur_pos = self.move2origin(cur_pos, batch)
-            cur_pos = self.random_augmentation(cur_pos, batch)  # random rotation, default False
+            cur_pos = self.random_augmentation(
+                cur_pos, batch
+            )  # random rotation, default False
             pos_list.append(cur_pos)
         # extra_output["prior_last_edge"] = self.dist_pred_layer(edge_attr)
         extra_output["prior_pos_list"] = pos_list
@@ -333,7 +358,9 @@ class GNN(nn.Module):
             if not self.no_3drot:
                 cur_pos = get_random_rotation_3d(cur_pos)
             for i, layer in enumerate(self.encoder_gnns):
-                extended_x, extended_edge_attr = self.extend_x_edge(cur_pos, x, edge_attr, edge_index)
+                extended_x, extended_edge_attr = self.extend_x_edge(
+                    cur_pos, x, edge_attr, edge_index
+                )
                 x_1, edge_attr_1, u_1 = layer(
                     extended_x,
                     edge_index,
@@ -345,7 +372,10 @@ class GNN(nn.Module):
                     num_edges,
                 )
                 x = F.dropout(x_1, p=self.dropout, training=self.training) + x
-                edge_attr = F.dropout(edge_attr_1, p=self.dropout, training=self.training) + edge_attr
+                edge_attr = (
+                    F.dropout(edge_attr_1, p=self.dropout, training=self.training)
+                    + edge_attr
+                )
                 u = F.dropout(u_1, p=self.dropout, training=self.training) + u
                 if self.use_ss:
                     cur_pos = get_random_rotation_3d(cur_pos)
@@ -356,13 +386,17 @@ class GNN(nn.Module):
                 aggregated_feat = self.pooling(x, node_batch)  # (G, 256)
 
             if self.use_ss:
-                extra_output["query_feat"] = self.prediction_head(self.projection_head(aggregated_feat))
+                extra_output["query_feat"] = self.prediction_head(
+                    self.projection_head(aggregated_feat)
+                )
                 with torch.no_grad():
                     x = x_embed
                     edge_attr = edge_attr_embed
                     u = u_embed
                     for i, layer in enumerate(self.encoder_gnns):
-                        extended_x, extended_edge_attr = self.extend_x_edge(cur_pos, x, edge_attr, edge_index)
+                        extended_x, extended_edge_attr = self.extend_x_edge(
+                            cur_pos, x, edge_attr, edge_index
+                        )
                         x_1, edge_attr_1, u_1 = layer(
                             extended_x,
                             edge_index,
@@ -374,7 +408,12 @@ class GNN(nn.Module):
                             num_edges,
                         )
                         x = F.dropout(x_1, p=self.dropout, training=self.training) + x
-                        edge_attr = F.dropout(edge_attr_1, p=self.dropout, training=self.training) + edge_attr
+                        edge_attr = (
+                            F.dropout(
+                                edge_attr_1, p=self.dropout, training=self.training
+                            )
+                            + edge_attr
+                        )
                         u = F.dropout(u_1, p=self.dropout, training=self.training) + u
                         cur_pos = get_random_rotation_3d(cur_pos)
                     if self.use_global:
@@ -385,15 +424,21 @@ class GNN(nn.Module):
                     extra_output["key_feat"] = self.projection_head(aggregated_feat_1)
 
             latent = self.encoder_head(aggregated_feat)  # (G, 512)
-            latent_mean, latent_logstd = torch.chunk(latent, chunks=2, dim=-1)  # (G, 256), (G, 256)
+            latent_mean, latent_logstd = torch.chunk(
+                latent, chunks=2, dim=-1
+            )  # (G, 256), (G, 256)
             extra_output["latent_mean"] = latent_mean
             extra_output["latent_logstd"] = latent_logstd
 
             # decoder
-            z = self.reparameterization(latent_mean, latent_logstd)  # (G, 256), z ~ N(mean, std^2)
+            z = self.reparameterization(
+                latent_mean, latent_logstd
+            )  # (G, 256), z ~ N(mean, std^2)
         else:
             z = torch.randn_like(u_embed) * self.sample_beta
-        z = torch.repeat_interleave(z, num_nodes, dim=0)  # (N, 256), for nodes in the same graph, they have the same z
+        z = torch.repeat_interleave(
+            z, num_nodes, dim=0
+        )  # (N, 256), for nodes in the same graph, they have the same z
         if self.reuse_prior:
             x, edge_attr, u = prior_output  # PHI_2D(x_embed, edge_attr_embed, u_embed)
         else:
@@ -408,7 +453,9 @@ class GNN(nn.Module):
             else:
                 cycle = 1
             for _ in range(cycle):
-                extended_x, extended_edge_attr = self.extend_x_edge(cur_pos, x + z, edge_attr, edge_index)
+                extended_x, extended_edge_attr = self.extend_x_edge(
+                    cur_pos, x + z, edge_attr, edge_index
+                )
                 x_1, edge_attr_1, u_1 = layer(
                     extended_x,
                     edge_index,
@@ -420,7 +467,10 @@ class GNN(nn.Module):
                     num_edges,
                 )
                 x = F.dropout(x_1, p=self.dropout, training=self.training) + x
-                edge_attr = F.dropout(edge_attr_1, p=self.dropout, training=self.training) + edge_attr
+                edge_attr = (
+                    F.dropout(edge_attr_1, p=self.dropout, training=self.training)
+                    + edge_attr
+                )
                 u = F.dropout(u_1, p=self.dropout, training=self.training) + u
                 if self.pred_pos_residual:
                     delta_pos = self.decoder_pos[i](x)
@@ -430,11 +480,16 @@ class GNN(nn.Module):
                     cur_pos = self.move2origin(cur_pos, batch)
                 cur_pos = self.random_augmentation(cur_pos, batch)
                 pos_list.append(cur_pos)
-                if self.sg_pos:  # To stabilize training, we stop gradient back-propagation through ρ, default False
+                if (
+                    self.sg_pos
+                ):  # To stabilize training, we stop gradient back-propagation through ρ, default False
                     cur_pos = cur_pos.detach()
 
         # extra_output["decoder_last_edge"] = self.dist_pred_layer(edge_attr)
-        return pos_list, extra_output  # extra_output: prior_pos_list, latent_mean, latent_logstd
+        return (
+            pos_list,
+            extra_output,
+        )  # extra_output: prior_pos_list, latent_mean, latent_logstd
 
     def random_augmentation(self, pos, batch):
         if self.rand_aug and self.training:
@@ -461,7 +516,9 @@ class GNN(nn.Module):
         col = edge_index[1]
         sent_pos = pos[row]
         received_pos = pos[col]
-        length = (sent_pos - received_pos).norm(dim=-1).unsqueeze(-1)  # (E, 1), distance between two connected atoms
+        length = (
+            (sent_pos - received_pos).norm(dim=-1).unsqueeze(-1)
+        )  # (E, 1), distance between two connected atoms
         # extended_edge_attr = torch.cat([edge_attr, length], dim=-1)
         extended_edge_attr = edge_attr + self.dis_embedding(length)  # (E, 256)
         return extended_x, extended_edge_attr
@@ -474,31 +531,48 @@ class GNN(nn.Module):
 
         pos = batch.pos  # (N, 3), label
 
-        new_idx = GNN.update_iso(pos, pos_list[-1], batch)
+        new_idx = GNN.update_iso(
+            pos, pos_list[-1], batch
+        )  # e.g. if original pos order is [0, 1, 2, 3, 4], and new pos order is [2, 0, 1, 4, 3], then new_idx = [2, 0, 1, 4, 3]
         # compute the loss between the encoder's output and the label
-        loss_tmp, _ = self.alignment_loss(pos, extra_output["prior_pos_list"][-1].index_select(0, new_idx), batch)
+        loss_tmp, _ = self.alignment_loss(
+            pos, extra_output["prior_pos_list"][-1].index_select(0, new_idx), batch
+        )
         loss = loss + loss_tmp
         loss_dict["loss_prior_pos"] = loss_tmp
         # compute KL divergence
         mean = extra_output["latent_mean"]
         log_std = extra_output["latent_logstd"]
-        kld = -0.5 * torch.sum(1 + 2 * log_std - mean.pow(2) - torch.exp(2 * log_std), dim=-1)
+        kld = -0.5 * torch.sum(
+            1 + 2 * log_std - mean.pow(2) - torch.exp(2 * log_std), dim=-1
+        )
         kld = kld.mean()
         loss = loss + kld * args.vae_beta
         loss_dict["loss_kld"] = kld
         # compute the loss between the decoder's output and the label
-        loss_tmp, _ = self.alignment_loss(pos, pos_list[-1].index_select(0, new_idx), batch, clamp=args.clamp_dist)
+        loss_tmp, _ = self.alignment_loss(
+            pos, pos_list[-1].index_select(0, new_idx), batch, clamp=args.clamp_dist
+        )
         loss = loss + loss_tmp
         loss_dict["loss_pos_last"] = loss_tmp
 
         if args.aux_loss > 0:
             for i in range(len(pos_list) - 1):
-                loss_tmp, _ = self.alignment_loss(pos, pos_list[i].index_select(0, new_idx), batch, clamp=args.clamp_dist)
-                loss = loss + loss_tmp * (args.aux_loss if i < len(pos_list) - args.cycle else 1.0)
+                loss_tmp, _ = self.alignment_loss(
+                    pos,
+                    pos_list[i].index_select(0, new_idx),
+                    batch,
+                    clamp=args.clamp_dist,
+                )
+                loss = loss + loss_tmp * (
+                    args.aux_loss if i < len(pos_list) - args.cycle else 1.0
+                )
                 loss_dict[f"loss_pos_{i}"] = loss_tmp
 
         if args.ang_lam > 0 or args.bond_lam > 0:
-            bond_loss, angle_loss = self.aux_loss(pos, pos_list[-1].index_select(0, new_idx), batch)
+            bond_loss, angle_loss = self.aux_loss(
+                pos, pos_list[-1].index_select(0, new_idx), batch
+            )
             loss_dict["bond_loss"] = bond_loss
             loss_dict["angle_loss"] = angle_loss
             loss = loss + args.bond_lam * bond_loss + args.ang_lam * angle_loss
@@ -530,9 +604,15 @@ class GNN(nn.Module):
         nei_tgt_mask = batch.nei_tgt_mask
 
         random_tgt_index = pos_y.new_zeros(nei_tgt_index.size()).uniform_()
-        random_tgt_index = torch.where(nei_tgt_mask, pos_y.new_zeros(nei_tgt_index.size()), random_tgt_index)
-        random_tgt_index_sort = torch.sort(random_tgt_index, descending=True, dim=0)[1][:2]
-        tgt_1, tgt_2 = random_tgt_index_sort[0].unsqueeze(0), random_tgt_index_sort[1].unsqueeze(0)
+        random_tgt_index = torch.where(
+            nei_tgt_mask, pos_y.new_zeros(nei_tgt_index.size()), random_tgt_index
+        )
+        random_tgt_index_sort = torch.sort(random_tgt_index, descending=True, dim=0)[1][
+            :2
+        ]
+        tgt_1, tgt_2 = random_tgt_index_sort[0].unsqueeze(0), random_tgt_index_sort[
+            1
+        ].unsqueeze(0)
 
         tgt_1 = torch.gather(nei_tgt_index, 0, tgt_1).view(-1)
         tgt_2 = torch.gather(nei_tgt_index, 0, tgt_2).view(-1)
@@ -542,8 +622,12 @@ class GNN(nn.Module):
             vec2 = vec2 / (torch.norm(vec2, keepdim=True, dim=-1) + 1e-6)
             return torch.einsum("nc,nc->n", vec1, vec2)
 
-        true_angle = get_angle(pos_y[tgt_1] - pos_y[nei_src_index], pos_y[tgt_2] - pos_y[nei_src_index])
-        pred_angle = get_angle(pos_x[tgt_1] - pos_x[nei_src_index], pos_x[tgt_2] - pos_x[nei_src_index])
+        true_angle = get_angle(
+            pos_y[tgt_1] - pos_y[nei_src_index], pos_y[tgt_2] - pos_y[nei_src_index]
+        )
+        pred_angle = get_angle(
+            pos_x[tgt_1] - pos_x[nei_src_index], pos_x[tgt_2] - pos_x[nei_src_index]
+        )
         angle_loss = torch.mean(F.l1_loss(pred_angle, true_angle))
 
         return bond_loss, angle_loss
@@ -564,7 +648,9 @@ class GNN(nn.Module):
         r20 = 2 * (q1 * q3 - q0 * q2)
         r21 = 2 * (q2 * q3 + q0 * q1)
         r22 = 2 * (q0 * q0 + q3 * q3) - 1
-        return torch.stack([r00, r01, r02, r10, r11, r12, r20, r21, r22], dim=-1).reshape(-1, 3, 3)
+        return torch.stack(
+            [r00, r01, r02, r10, r11, r12, r20, r21, r22], dim=-1
+        ).reshape(-1, 3, 3)
 
     @staticmethod
     def alignment_loss(pos_y, pos_x, batch, clamp=None):
@@ -580,7 +666,13 @@ class GNN(nn.Module):
             b = y - x
             a = a.view(total_nodes, 1, 3)
             b = b.view(total_nodes, 3, 1)
-            tmp0 = torch.cat([b.new_zeros((1, 1, 1)).expand(total_nodes, -1, -1), -b.permute(0, 2, 1)], dim=-1)
+            tmp0 = torch.cat(
+                [
+                    b.new_zeros((1, 1, 1)).expand(total_nodes, -1, -1),
+                    -b.permute(0, 2, 1),
+                ],
+                dim=-1,
+            )
             eye = torch.eye(3).to(a).unsqueeze(0).expand(total_nodes, -1, -1)
             a = a.expand(-1, 3, -1)
             tmp1 = torch.cross(eye, a, dim=-1)
@@ -597,14 +689,20 @@ class GNN(nn.Module):
             t = torch.repeat_interleave(t, num_nodes, dim=0)
         pos_x = torch.einsum("kj,kij->ki", pos_x, rotation) + t
         if clamp is None:
-            loss = global_mean_pool((pos_y - pos_x).norm(dim=-1, keepdim=True), batch.batch).mean()
+            loss = global_mean_pool(
+                (pos_y - pos_x).norm(dim=-1, keepdim=True), batch.batch
+            ).mean()
         else:
-            loss = global_mean_pool((pos_y - pos_x).norm(dim=-1, keepdim=True), batch.batch)
+            loss = global_mean_pool(
+                (pos_y - pos_x).norm(dim=-1, keepdim=True), batch.batch
+            )
             loss = torch.clamp(loss, min=clamp).mean()
         return loss, min_rmsd.mean()
 
     @staticmethod
-    def alignment_loss_iso_onegraph(pos_y, pos_x, pos_y_mean, pos_x_mean, num_nodes, total_iso):
+    def alignment_loss_iso_onegraph(
+        pos_y, pos_x, pos_y_mean, pos_x_mean, num_nodes, total_iso
+    ):
         with torch.no_grad():
             total_nodes = pos_y.shape[0]
             y = pos_y - pos_y_mean
@@ -613,7 +711,13 @@ class GNN(nn.Module):
             b = y - x
             a = a.view(-1, 1, 3)
             b = b.view(-1, 3, 1)
-            tmp0 = torch.cat([b.new_zeros((1, 1, 1)).expand(total_nodes, -1, -1), -b.permute(0, 2, 1)], dim=-1)
+            tmp0 = torch.cat(
+                [
+                    b.new_zeros((1, 1, 1)).expand(total_nodes, -1, -1),
+                    -b.permute(0, 2, 1),
+                ],
+                dim=-1,
+            )
             eye = torch.eye(3).to(a).unsqueeze(0).expand(total_nodes, -1, -1)
             a = a.expand(-1, 3, -1)
             tmp1 = torch.cross(eye, a, dim=-1)
@@ -624,7 +728,9 @@ class GNN(nn.Module):
             w, v = torch.linalg.eigh(tmpb)
             min_q = v[:, :, 0]
             rotation = GNN.quaternion_to_rotation_matrix(min_q)
-            t = pos_y_mean - torch.einsum("kj,kij->ki", pos_x_mean.expand(total_iso, -1), rotation)
+            t = pos_y_mean - torch.einsum(
+                "kj,kij->ki", pos_x_mean.expand(total_iso, -1), rotation
+            )
             rotation = torch.repeat_interleave(rotation, num_nodes, dim=0)
             t = torch.repeat_interleave(t, num_nodes, dim=0)
             pos_x = torch.einsum("kj,kij->ki", pos_x, rotation) + t
@@ -640,7 +746,9 @@ class GNN(nn.Module):
             return torch.argmin(loss)
 
     @staticmethod
-    def update_iso(pos_y, pos_x, batch):  # update the isomorphism of the graph
+    def update_iso(
+        pos_y, pos_x, batch
+    ):  # update the isomorphism of the graph. Shape of pos_y and pos_x: (N, 3)
         with torch.no_grad():
             pre_nodes = 0
             num_nodes = batch.n_nodes
@@ -648,33 +756,53 @@ class GNN(nn.Module):
             new_idx_x = []
             for i in range(batch.num_graphs):  # for each graph
                 cur_num_nodes = num_nodes[i]  # number of nodes in the current graph
-                current_isomorphisms = [torch.LongTensor(iso).to(pos_x.device) for iso in isomorphisms[i]]  # all possible isomorphisms of the current graph
+                current_isomorphisms = [
+                    torch.LongTensor(iso).to(pos_x.device) for iso in isomorphisms[i]
+                ]  # all possible isomorphisms of the current graph
                 if len(current_isomorphisms) == 1:
                     new_idx_x.append(current_isomorphisms[0] + pre_nodes)
                 else:
-                    pos_y_i = pos_y[pre_nodes : pre_nodes + cur_num_nodes]  # (N, 3)， current nodes' coordinates
-                    pos_x_i = pos_x[pre_nodes : pre_nodes + cur_num_nodes]
-                    pos_y_mean = torch.mean(pos_y_i, dim=0, keepdim=True)
-                    pos_x_mean = torch.mean(pos_x_i, dim=0, keepdim=True)
+                    pos_y_i = pos_y[
+                        pre_nodes : pre_nodes + cur_num_nodes
+                    ]  # (n, 3)， current graph's pos_y
+                    pos_x_i = pos_x[
+                        pre_nodes : pre_nodes + cur_num_nodes
+                    ]  # (n, 3)， current graph's pos_x
+                    pos_y_mean = torch.mean(
+                        pos_y_i, dim=0, keepdim=True
+                    )  # (1, 3)， mean of the current graph's pos_y
+                    pos_x_mean = torch.mean(
+                        pos_x_i, dim=0, keepdim=True
+                    )  # (1, 3)， mean of the current graph's pos_x
                     pos_x_list = []
 
-                    for iso in current_isomorphisms:  # change the coordinates of the current graph nodes to all possible isomorphisms
+                    for iso in current_isomorphisms:
+                        # change coordinates' order according to the isomorphism
+                        # e.g. if iso = [1, 0, 2], then the new pos_x_i = [pos_x_i[1], pos_x_i[0], pos_x_i[2]]
                         pos_x_list.append(torch.index_select(pos_x_i, 0, iso))
-                    total_iso = len(pos_x_list)
-                    pos_y_i = pos_y_i.repeat(total_iso, 1)
-                    pos_x_i = torch.cat(pos_x_list, dim=0)
-                    min_idx = GNN.alignment_loss_iso_onegraph(
-                        pos_y_i,
-                        pos_x_i,
-                        pos_y_mean,
-                        pos_x_mean,
-                        num_nodes=cur_num_nodes,
-                        total_iso=total_iso,
+                        # in the end, pos_x_list contains all possible pos_x_i, as a list with length len(current_isomorphisms) and each element is (n, 3)
+                    total_iso = len(pos_x_list)  # total number of possible isomorphisms
+                    pos_y_i = pos_y_i.repeat(
+                        total_iso, 1
+                    )  # (n * len(current_isomorphisms), 3), repeat pos_y_i for total_iso times
+                    pos_x_i = torch.cat(
+                        pos_x_list, dim=0
+                    )  # (n * len(current_isomorphisms), 3)
+                    min_idx = GNN.alignment_loss_iso_onegraph(  # find the best isomorphism according to the alignment loss
+                        pos_y_i,  # (n * len(current_isomorphisms), 3)
+                        pos_x_i,  # (n * len(current_isomorphisms), 3)
+                        pos_y_mean,  # (1, 3)
+                        pos_x_mean,  # (1, 3)
+                        num_nodes=cur_num_nodes,  # n
+                        total_iso=total_iso,  # len(current_isomorphisms)
                     )
                     new_idx_x.append(current_isomorphisms[min_idx.item()] + pre_nodes)
                 pre_nodes += cur_num_nodes
 
-            return torch.cat(new_idx_x, dim=0)
+            # new_idx_x is a list of int numbers, each number is the index of the node in the new pos_x
+            # e.g. if original pos order is [0, 1, 2, 3, 4], and new pos order is [2, 0, 1, 4, 3], then new_idx_x = [2, 0, 1, 4, 3]
+            res = torch.cat(new_idx_x, dim=0)
+            return res
 
     @staticmethod
     def alignment(pos_y, pos_x, batch):
@@ -690,7 +818,13 @@ class GNN(nn.Module):
             b = y - x
             a = a.view(total_nodes, 1, 3)
             b = b.view(total_nodes, 3, 1)
-            tmp0 = torch.cat([b.new_zeros((1, 1, 1)).expand(total_nodes, -1, -1), -b.permute(0, 2, 1)], dim=-1)
+            tmp0 = torch.cat(
+                [
+                    b.new_zeros((1, 1, 1)).expand(total_nodes, -1, -1),
+                    -b.permute(0, 2, 1),
+                ],
+                dim=-1,
+            )
             eye = torch.eye(3).to(a).unsqueeze(0).expand(total_nodes, -1, -1)
             a = a.expand(-1, 3, -1)
             tmp1 = torch.cross(eye, a, dim=-1)
@@ -768,7 +902,9 @@ class GNN(nn.Module):
             edge_attr = edge_attr_embed
             u = u_embed
             for i, layer in enumerate(self.prior_conf_gnns):
-                extended_x, extended_edge_attr = self.extend_x_edge(cur_pos, x, edge_attr, edge_index)
+                extended_x, extended_edge_attr = self.extend_x_edge(
+                    cur_pos, x, edge_attr, edge_index
+                )
                 x_1, edge_attr_1, u_1 = layer(
                     extended_x,
                     edge_index,
@@ -780,7 +916,10 @@ class GNN(nn.Module):
                     num_edges,
                 )
                 x = F.dropout(x_1, p=self.dropout, training=self.training) + x
-                edge_attr = F.dropout(edge_attr_1, p=self.dropout, training=self.training) + edge_attr
+                edge_attr = (
+                    F.dropout(edge_attr_1, p=self.dropout, training=self.training)
+                    + edge_attr
+                )
                 u = F.dropout(u_1, p=self.dropout, training=self.training) + u
                 if self.pred_pos_residual:
                     delta_pos = self.prior_conf_pos[i](x)
@@ -813,7 +952,9 @@ class GNN(nn.Module):
                 else:
                     cycle = 1
                 for _ in range(cycle):
-                    extended_x, extended_edge_attr = self.extend_x_edge(cur_pos, x + z_decoder, edge_attr, edge_index)
+                    extended_x, extended_edge_attr = self.extend_x_edge(
+                        cur_pos, x + z_decoder, edge_attr, edge_index
+                    )
                     x_1, edge_attr_1, u_1 = layer(
                         extended_x,
                         edge_index,
@@ -825,7 +966,10 @@ class GNN(nn.Module):
                         num_edges,
                     )
                     x = F.dropout(x_1, p=self.dropout, training=self.training) + x
-                    edge_attr = F.dropout(edge_attr_1, p=self.dropout, training=self.training) + edge_attr
+                    edge_attr = (
+                        F.dropout(edge_attr_1, p=self.dropout, training=self.training)
+                        + edge_attr
+                    )
                     u = F.dropout(u_1, p=self.dropout, training=self.training) + u
                     if self.pred_pos_residual:
                         delta_pos = self.decoder_pos[i](x)
@@ -838,7 +982,9 @@ class GNN(nn.Module):
                     if self.sg_pos:
                         cur_pos = cur_pos.detach()
 
-            score_decoder = -(pos - self.alignment(pos, pos_list[-1], batch)) / args.decoder_std**2
+            score_decoder = (
+                -(pos - self.alignment(pos, pos_list[-1], batch)) / args.decoder_std**2
+            )
 
         x = x_embed
         edge_attr = edge_attr_embed
@@ -847,7 +993,9 @@ class GNN(nn.Module):
         cur_pos = self.move2origin(pos, batch)
         cur_pos = get_random_rotation_3d(cur_pos)
         for i, layer in enumerate(self.encoder_gnns):
-            extended_x, extended_edge_attr = self.extend_x_edge(cur_pos, x, edge_attr, edge_index)
+            extended_x, extended_edge_attr = self.extend_x_edge(
+                cur_pos, x, edge_attr, edge_index
+            )
             x_1, edge_attr_1, u_1 = layer(
                 extended_x,
                 edge_index,
@@ -859,7 +1007,10 @@ class GNN(nn.Module):
                 num_edges,
             )
             x = F.dropout(x_1, p=self.dropout, training=self.training) + x
-            edge_attr = F.dropout(edge_attr_1, p=self.dropout, training=self.training) + edge_attr
+            edge_attr = (
+                F.dropout(edge_attr_1, p=self.dropout, training=self.training)
+                + edge_attr
+            )
             u = F.dropout(u_1, p=self.dropout, training=self.training) + u
 
         if self.use_global:
@@ -870,7 +1021,10 @@ class GNN(nn.Module):
         latent = self.encoder_head(aggregated_feat)
         latent_mean, latent_logstd = torch.chunk(latent, chunks=2, dim=-1)
 
-        logq = -latent_logstd - 0.5 * (latent_mean - z) ** 2 / (torch.exp(latent_logstd)) ** 2
+        logq = (
+            -latent_logstd
+            - 0.5 * (latent_mean - z) ** 2 / (torch.exp(latent_logstd)) ** 2
+        )
         score_encoder = torch.autograd.grad(logq.sum(), pos)[0]
 
         return (score_decoder - score_encoder).detach()
@@ -880,7 +1034,11 @@ def one_hot_atoms(atoms):
     vocab_sizes = get_atom_feature_dims()
     one_hots = []
     for i in range(atoms.shape[1]):
-        one_hots.append(F.one_hot(atoms[:, i], num_classes=vocab_sizes[i]).to(atoms.device).to(torch.float32))
+        one_hots.append(
+            F.one_hot(atoms[:, i], num_classes=vocab_sizes[i])
+            .to(atoms.device)
+            .to(torch.float32)
+        )
     return torch.cat(one_hots, dim=1)
 
 
@@ -888,5 +1046,9 @@ def one_hot_bonds(bonds):
     vocab_sizes = get_bond_feature_dims()
     one_hots = []
     for i in range(bonds.shape[1]):
-        one_hots.append(F.one_hot(bonds[:, i], num_classes=vocab_sizes[i]).to(bonds.device).to(torch.float32))
+        one_hots.append(
+            F.one_hot(bonds[:, i], num_classes=vocab_sizes[i])
+            .to(bonds.device)
+            .to(torch.float32)
+        )
     return torch.cat(one_hots, dim=1)
