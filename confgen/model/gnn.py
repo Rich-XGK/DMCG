@@ -655,17 +655,17 @@ class GNN(nn.Module):
     @staticmethod
     def alignment_loss(pos_y, pos_x, batch, clamp=None):
         with torch.no_grad():
-            num_nodes = batch.n_nodes
-            total_nodes = pos_y.shape[0]
-            num_graphs = batch.num_graphs
-            pos_y_mean = global_mean_pool(pos_y, batch.batch)
-            pos_x_mean = global_mean_pool(pos_x, batch.batch)
-            y = pos_y - torch.repeat_interleave(pos_y_mean, num_nodes, dim=0)
-            x = pos_x - torch.repeat_interleave(pos_x_mean, num_nodes, dim=0)
-            a = y + x
-            b = y - x
-            a = a.view(total_nodes, 1, 3)
-            b = b.view(total_nodes, 3, 1)
+            num_nodes = batch.n_nodes   # number of nodes in each graph, [n1, n2, ...]
+            total_nodes = pos_y.shape[0]    # total number of nodes in all graphs, N = n1 + n2 + ...
+            num_graphs = batch.num_graphs   # number of graphs, G
+            pos_y_mean = global_mean_pool(pos_y, batch.batch)   # (G, 3), mean of pos_y in each graph
+            pos_x_mean = global_mean_pool(pos_x, batch.batch)   # (G, 3), mean of pos_x in each graph
+            y = pos_y - torch.repeat_interleave(pos_y_mean, num_nodes, dim=0)   # (N, 3), y = y - mean(y)
+            x = pos_x - torch.repeat_interleave(pos_x_mean, num_nodes, dim=0)   # (N, 3), x = x - mean(x)
+            a = y + x  # (N, 3)
+            b = y - x   # (N, 3)
+            a = a.view(total_nodes, 1, 3)   # (N, 1, 3)
+            b = b.view(total_nodes, 3, 1)   # (N, 3, 1)
             tmp0 = torch.cat(
                 [
                     b.new_zeros((1, 1, 1)).expand(total_nodes, -1, -1),
