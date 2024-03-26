@@ -21,37 +21,37 @@ _REDUCER_NAMES = {
 class GNN(nn.Module):
     def __init__(
         self,
-        mlp_hidden_size: int = 512,
-        mlp_layers: int = 2,
-        latent_size: int = 256,
-        use_layer_norm: bool = False,
-        num_message_passing_steps: int = 12,
-        global_reducer: str = "sum",
-        node_reducer: str = "sum",
-        dropedge_rate: float = 0.1,
-        dropnode_rate: float = 0.1,
-        dropout: float = 0.1,
-        graph_pooling: str = "sum",
-        layernorm_before: bool = False,
-        pooler_dropout: float = 0.0,
-        encoder_dropout: float = 0.0,
-        use_bn: bool = False,
-        vae_beta: float = 1.0,
-        decoder_layers: int = None,
-        reuse_prior: bool = False,
-        cycle: int = 1,
-        pred_pos_residual: bool = False,
-        node_attn: bool = False,
-        shared_decoder: bool = False,
-        shared_output: bool = False,
-        global_attn: bool = False,
-        sample_beta: float = 1,
-        use_global: bool = False,
-        sg_pos: bool = False,
-        use_ss: bool = False,
-        rand_aug: bool = False,
-        no_3drot: bool = False,
-        not_origin: bool = False,
+        mlp_hidden_size: int = 512, # 1024
+        mlp_layers: int = 2,    # 2
+        latent_size: int = 256, # 256
+        use_layer_norm: bool = False,   # False
+        num_message_passing_steps: int = 12,    # 6
+        global_reducer: str = "sum",    # sum
+        node_reducer: str = "sum",  # sum
+        dropedge_rate: float = 0.1, # 0.1
+        dropnode_rate: float = 0.1, # 0.1
+        dropout: float = 0.1,   # 0.1
+        graph_pooling: str = "sum", # sum
+        layernorm_before: bool = False, # False
+        pooler_dropout: float = 0.0,    # 0.0
+        encoder_dropout: float = 0.0,   # 0.0
+        use_bn: bool = False,   # True
+        vae_beta: float = 1.0,  # 1.0
+        decoder_layers: int = None, # None
+        reuse_prior: bool = False,  # True
+        cycle: int = 1, # 1
+        pred_pos_residual: bool = False,   # True
+        node_attn: bool = False,    # True
+        shared_decoder: bool = False,   # False
+        shared_output: bool = False,    # True
+        global_attn: bool = False,  # False
+        sample_beta: float = 1, # 1
+        use_global: bool = False,   # False
+        sg_pos: bool = False,   # False
+        use_ss: bool = False,   # False
+        rand_aug: bool = False, # False
+        no_3drot: bool = False, # True
+        not_origin: bool = False,   # False
     ):
         super().__init__()
 
@@ -354,7 +354,7 @@ class GNN(nn.Module):
             x = x_embed
             edge_attr = edge_attr_embed
             u = u_embed
-            cur_pos = self.move2origin(batch.pos, batch)
+            cur_pos = self.move2origin(batch.pos, batch)    # NOTE: R^(0)
             if not self.no_3drot:
                 cur_pos = get_random_rotation_3d(cur_pos)
             for i, layer in enumerate(self.encoder_gnns):
@@ -451,7 +451,7 @@ class GNN(nn.Module):
             if i == len(self.decoder_gnns) - 1:
                 cycle = self.cycle
             else:
-                cycle = 1
+                cycle = 1   # 
             for _ in range(cycle):
                 extended_x, extended_edge_attr = self.extend_x_edge(
                     cur_pos, x + z, edge_attr, edge_index
@@ -535,7 +535,7 @@ class GNN(nn.Module):
             pos, pos_list[-1], batch
         )  # e.g. if original pos order is [0, 1, 2, 3, 4], and new pos order is [2, 0, 1, 4, 3], then new_idx = [2, 0, 1, 4, 3]
         # compute the loss between the encoder's output and the label
-        loss_tmp, _ = self.alignment_loss(
+        loss_tmp, _ = self.alignment_loss(  # loss between pos_label and last pos_pred in Phi_2D
             pos, extra_output["prior_pos_list"][-1].index_select(0, new_idx), batch
         )
         loss = loss + loss_tmp
@@ -550,7 +550,7 @@ class GNN(nn.Module):
         loss = loss + kld * args.vae_beta
         loss_dict["loss_kld"] = kld
         # compute the loss between the decoder's output and the label
-        loss_tmp, _ = self.alignment_loss(
+        loss_tmp, _ = self.alignment_loss(  # loss between pos_label and last pos_pred (final pos_pred) in Phi_Dec 
             pos, pos_list[-1].index_select(0, new_idx), batch, clamp=args.clamp_dist
         )
         loss = loss + loss_tmp
