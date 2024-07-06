@@ -26,6 +26,33 @@ import multiprocessing
 from rdkit.Chem.rdForceFieldHelpers import MMFFOptimizeMolecule
 
 
+def calculate_rmsd(mols1, mols2, use_ff):
+    rmsd_mat = np.zeros([len(mols1), len(mols2)], dtype=np.float32)
+    for i, mol1 in enumerate(mols1):
+        mol1_c = copy.deepcopy(mol1)
+        if use_ff:
+            MMFFOptimizeMolecule(mol1_c)
+        for j, mol2 in enumerate(mols2):
+            mol2_c = copy.deepcopy(mol2)
+            rmsd_mat[i, j] = get_best_rmsd(mol1_c, mol2_c)
+    return rmsd_mat
+
+def get_recall_precision(inputargs):
+    mols, use_ff, threshold = inputargs
+    gen_mols, ref_mols = mols
+
+    # Recall calculation: ref_mols compared with gen_mols
+    rmsd_mat_recall = calculate_rmsd(ref_mols, gen_mols, use_ff)
+    rmsd_mat_min_recall = rmsd_mat_recall.min(-1)
+    recall = (rmsd_mat_min_recall <= threshold).mean(), rmsd_mat_min_recall.mean()
+    # Precision calculation: gen_mols compared with ref_mols
+    rmsd_mat_precision = calculate_rmsd(gen_mols, ref_mols, use_ff)
+    rmsd_mat_min_precision = rmsd_mat_precision.min(-1)
+    precision = (rmsd_mat_min_precision <= threshold).mean(), rmsd_mat_min_precision.mean()
+
+    return recall, precision
+
+
 def train(model, device, loader, optimizer, scheduler, args):
     model.train()
     loss_accum_dict = defaultdict(float)
@@ -140,12 +167,35 @@ def evaluate(model, device, loader, args):
         for smiles in smiles2pairs.keys():
             yield smiles2pairs[smiles], args.use_ff, 0.5 if args.dataset_name == "qm9" else 1.25
 
-    for res in tqdm(pool.imap(get_rmsd_min, input_args(), chunksize=10), total=len(smiles2pairs)):
-        cov_list.append(res[0])
-        mat_list.append(res[1])
-    print(f"cov mean {np.mean(cov_list)} med {np.median(cov_list)}")
-    print(f"mat mean {np.mean(mat_list)} med {np.median(mat_list)}")
-    return np.mean(cov_list), np.mean(mat_list)
+    # for res in tqdm(pool.imap(get_rmsd_min, input_args(), chunksize=10), total=len(smiles2pairs)):
+    #     cov_list.append(res[0])
+    #     mat_list.append(res[1])
+    # print(f"cov mean {np.mean(cov_list)} med {np.median(cov_list)}")
+    # print(f"mat mean {np.mean(mat_list)} med {np.median(mat_list)}")
+    # return np.mean(cov_list), np.mean(mat_list)
+
+    recall_cov_list, recall_mat_list = [], []
+    precision_cov_list, precision_mat_list = [], []
+
+    for recall_res, precision_res in tqdm(pool.imap(get_recall_precision, input_args(), chunksize=10), total=len(smiles2pairs)):
+        recall_cov_list.append(recall_res[0])
+        recall_mat_list.append(recall_res[1])
+        precision_cov_list.append(precision_res[0])
+        precision_mat_list.append(precision_res[1])
+
+    recall_cov_mean, recall_cov_med = np.mean(recall_cov_list), np.median(recall_cov_list)
+    recall_mat_mean, recall_mat_med = np.mean(recall_mat_list), np.median(recall_mat_list)
+    precision_cov_mean, precision_cov_med = np.mean(precision_cov_list), np.median(precision_cov_list)
+    precision_mat_mean, precision_mat_med = np.mean(precision_mat_list), np.median(precision_mat_list)
+
+    print("********** Evaluation Results **********")
+    print("Recall metrics:")
+    print(f"Cov-Mean: {recall_cov_mean:.4f}, Cov-Med: {recall_cov_med:.4f} || Mat-Mean: {recall_mat_mean:.4f}, Mat-Med: {recall_mat_med:.4f}")
+    print("****************************************")
+    print("Precision metrics:")
+    print(f"Cov-Mean: {precision_cov_mean:.4f}, Cov-Med: {precision_cov_med:.4f} || Mat-Mean: {precision_mat_mean:.4f}, Mat-Med: {precision_mat_med:.4f}")
+    print("****************************************")
+
 
 
 def evaluate_one(model, device, loader):
